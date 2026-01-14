@@ -1,5 +1,5 @@
 {
-  "name": "react-currency-input-field",
+  "name": "@oyalhi/react-currency-input-field",
   "version": "4.0.3",
   "description": "React <input/> component for formatting currency and numbers.",
   "sideEffects": false,
@@ -17,8 +17,9 @@
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "dist/index.d.ts",
-  "homepage": "https://github.com/cchanxzy/react-currency-input-field",
+  "homepage": "https://github.com/oyalhi/react-currency-input-field-custom",
   "scripts": {
+    "prepare": "pnpm build",
     "build:types": "tsc",
     "build:js": "node esbuild.mjs",
     "build": "rm -rf dist && pnpm build:js && pnpm build:types",
@@ -34,11 +35,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/cchanxzy/react-currency-input-field"
+    "url": "https://github.com/oyalhi/react-currency-input-field-custom"
   },
   "bugs": {
-    "email": "cchan.xzy@gmail.com",
-    "url": "https://github.com/cchanxzy/react-currency-input-field/issues"
+    "email": "omer@yalhi.com",
+    "url": "https://github.com/oyalhi/react-currency-input-field-custom/issues"
   },
   "keywords": [
     "react",
@@ -51,7 +52,7 @@
     "intl",
     "locale"
   ],
-  "author": "cchanxzy",
+  "author": "oyalhi",
   "license": "MIT",
   "devDependencies": {
     "@commitlint/cli": "^18.4.3",
