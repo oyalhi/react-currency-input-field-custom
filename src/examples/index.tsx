@@ -5,6 +5,7 @@ import Example1 from './Example1';
 import Example2 from './Example2';
 import Example3 from './Example3';
 import Example4 from './Example4';
+import Example5 from './Example5';
 import FormatValuesExample from './FormatValuesExample';
 
 const container = document.getElementById('app');
@@ -33,6 +34,12 @@ const Content = () => {
 
       <div id="example-4">
         <Example4 />
+      </div>
+
+      <hr />
+
+      <div id="example-5">
+        <Example5 />
       </div>
 
       <hr />

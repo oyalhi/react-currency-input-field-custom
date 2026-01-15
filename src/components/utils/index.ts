@@ -1,5 +1,6 @@
 export { cleanValue } from './cleanValue';
 export type { CleanValueOptions } from './cleanValue';
+export { evaluateMathExpressionSimple } from './evaluate-math-expression-simple';
 export { fixedDecimalValue } from './fixedDecimalValue';
 export { formatValue } from './formatValue';
 export type { FormatValueOptions } from './formatValue.types';
