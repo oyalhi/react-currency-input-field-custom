@@ -6,6 +6,7 @@ import React, {
   forwardRef,
   useMemo,
   useImperativeHandle,
+  useCallback,
 } from 'react';
 import { CurrencyInputProps, CurrencyInputOnChangeValues } from './CurrencyInputProps';
 import {
@@ -19,6 +20,7 @@ import {
   getSuffix,
   FormatValueOptions,
   repositionCursor,
+  evaluateMathExpressionSimple,
 } from './utils';
 
 export const CurrencyInput: FC<CurrencyInputProps> = forwardRef<
@@ -115,14 +117,56 @@ export const CurrencyInput: FC<CurrencyInputProps> = forwardRef<
     const [cursor, setCursor] = useState(0);
     const [changeCount, setChangeCount] = useState(0);
     const [lastKeyStroke, setLastKeyStroke] = useState<string | null>(null);
+    const [lastValidValue, setLastValidValue] = useState<string>(() =>
+      defaultValue != null
+        ? formatValue({ ...formatValueOptions, decimalScale, value: String(defaultValue) })
+        : userValue != null
+          ? formatValue({ ...formatValueOptions, decimalScale, value: String(userValue) })
+          : ''
+    );
     const inputRef = useRef<HTMLInputElement>(null);
     useImperativeHandle(ref, () => inputRef.current as HTMLInputElement);
+
+    /**
+     * Check if value contains math operators
+     */
+    const containsMathOperators = useCallback(
+      (value: string): boolean => {
+        const cleanValue = value.replace(prefix || '', '').replace(suffix || '', '');
+        // Check for multiply, divide, percentage, parentheses
+        if (/[*/%()+]/.test(cleanValue)) {
+          return true;
+        }
+        // Check for minus/plus that's not at the start (to allow negative numbers)
+        if (/[^-+][-+]/.test(cleanValue)) {
+          return true;
+        }
+        return false;
+      },
+      [prefix, suffix]
+    );
 
     /**
      * Process change in value
      */
     const processChange = (value: string, selectionStart?: number | null): void => {
       setDirty(true);
+
+      // If value contains math operators, show raw input without formatting or cursor repositioning
+      if (containsMathOperators(value)) {
+        setStateValue(value);
+        // Don't manipulate cursor for expressions - let it stay where user placed it
+        // Still call onValueChange so controlled components can update
+        if (onValueChange) {
+          const cleanExpression = value.replace(prefix || '', '').replace(suffix || '', '').trim();
+          onValueChange(cleanExpression, name, {
+            float: null,
+            formatted: value,
+            value: cleanExpression,
+          });
+        }
+        return;
+      }
 
       const { modifiedValue, cursorPosition } = repositionCursor({
         selectionStart,
@@ -141,6 +185,7 @@ export const CurrencyInput: FC<CurrencyInputProps> = forwardRef<
       if (stringValue === '' || stringValue === '-' || stringValue === decimalSeparator) {
         onValueChange && onValueChange(undefined, name, { float: null, formatted: '', value: '' });
         setStateValue(stringValue);
+        setLastValidValue('');
         // Always sets cursor after '-' or decimalSeparator input
         setCursor(1);
         return;
@@ -167,6 +212,7 @@ export const CurrencyInput: FC<CurrencyInputProps> = forwardRef<
       }
 
       setStateValue(formattedValue);
+      setLastValidValue(formattedValue);
 
       if (onValueChange) {
         const values: CurrencyInputOnChangeValues = {
@@ -209,10 +255,41 @@ export const CurrencyInput: FC<CurrencyInputProps> = forwardRef<
         target: { value },
       } = event;
 
+      // Check if value contains math operators and try to evaluate
+      if (containsMathOperators(value)) {
+        let cleanExpression = value.replace(prefix || '', '').replace(suffix || '', '').trim();
+        // Remove group separators and replace decimal separator with '.'
+        if (groupSeparator) {
+          cleanExpression = cleanExpression.replace(new RegExp(`\\${groupSeparator}`, 'g'), '');
+        }
+        if (decimalSeparator && decimalSeparator !== '.') {
+          cleanExpression = cleanExpression.replace(new RegExp(`\\${decimalSeparator}`, 'g'), '.');
+        }
+        const evaluatedResult = evaluateMathExpressionSimple(cleanExpression);
+
+        if (evaluatedResult !== undefined) {
+          // Valid expression - process the result
+          processChange(String(evaluatedResult).replace('.', decimalSeparator));
+          // Set cursor to the end (for when field regains focus)
+          setTimeout(() => {
+            if (inputRef.current && document.activeElement === inputRef.current) {
+              const newLength = inputRef.current.value.length;
+              inputRef.current.setSelectionRange(newLength, newLength);
+            }
+          }, 0);
+        } else {
+          // Invalid expression - restore last valid value
+          setStateValue(lastValidValue);
+        }
+        onBlur && onBlur(event);
+        return;
+      }
+
       const valueOnly = cleanValue({ value, ...cleanValueOptions });
 
       if (valueOnly === '-' || valueOnly === decimalSeparator || !valueOnly) {
         setStateValue('');
+        setLastValidValue('');
         onBlur && onBlur(event);
         return;
       }
@@ -245,6 +322,7 @@ export const CurrencyInput: FC<CurrencyInputProps> = forwardRef<
       }
 
       setStateValue(formattedValue);
+      setLastValidValue(formattedValue);
 
       onBlur && onBlur(event);
     };
@@ -258,6 +336,39 @@ export const CurrencyInput: FC<CurrencyInputProps> = forwardRef<
       const { key } = event;
 
       setLastKeyStroke(key);
+
+      // Handle Enter key for math expression evaluation
+      if (key === 'Enter') {
+        const value = stateValue;
+        if (containsMathOperators(value)) {
+          event.preventDefault();
+          let cleanExpression = value.replace(prefix || '', '').replace(suffix || '', '').trim();
+          // Remove group separators and replace decimal separator with '.'
+          if (groupSeparator) {
+            cleanExpression = cleanExpression.replace(new RegExp(`\\${groupSeparator}`, 'g'), '');
+          }
+          if (decimalSeparator && decimalSeparator !== '.') {
+            cleanExpression = cleanExpression.replace(new RegExp(`\\${decimalSeparator}`, 'g'), '.');
+          }
+          const evaluatedResult = evaluateMathExpressionSimple(cleanExpression);
+
+          if (evaluatedResult !== undefined) {
+            // Valid expression - process the result
+            processChange(String(evaluatedResult).replace('.', decimalSeparator));
+            // Set cursor to the end
+            setTimeout(() => {
+              if (inputRef.current) {
+                const newLength = inputRef.current.value.length;
+                inputRef.current.setSelectionRange(newLength, newLength);
+              }
+            }, 0);
+          } else {
+            // Invalid expression - restore last valid value
+            setStateValue(lastValidValue);
+          }
+          return;
+        }
+      }
 
       if (step && (key === 'ArrowUp' || key === 'ArrowDown')) {
         event.preventDefault();
@@ -313,7 +424,9 @@ export const CurrencyInput: FC<CurrencyInputProps> = forwardRef<
         key,
         currentTarget: { selectionStart },
       } = event;
-      if (key !== 'ArrowUp' && key !== 'ArrowDown' && stateValue !== '-') {
+      
+      // Skip cursor manipulation for math expressions
+      if (key !== 'ArrowUp' && key !== 'ArrowDown' && stateValue !== '-' && !containsMathOperators(stateValue)) {
         const suffix = getSuffix(stateValue, { groupSeparator, decimalSeparator });
 
         if (suffix && selectionStart && selectionStart > stateValue.length - suffix.length) {
@@ -337,15 +450,17 @@ export const CurrencyInput: FC<CurrencyInputProps> = forwardRef<
 
     useEffect(() => {
       // prevent cursor jumping if editing value
+      // Skip cursor manipulation if value contains math operators
       if (
         dirty &&
         stateValue !== '-' &&
+        !containsMathOperators(stateValue) &&
         inputRef.current &&
         document.activeElement === inputRef.current
       ) {
         inputRef.current.setSelectionRange(cursor, cursor);
       }
-    }, [stateValue, cursor, inputRef, dirty, changeCount]);
+    }, [stateValue, cursor, inputRef, dirty, changeCount, containsMathOperators]);
 
     /**
      * If user has only entered "-" or decimal separator,
